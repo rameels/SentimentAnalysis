@@ -1,51 +1,58 @@
 from __future__ import division
+from argparse import ArgumentParser
 import json
-from subprocess import call
+from subprocess import Popen, PIPE
 import sys
 
-inputFile = sys.argv[1]
-cleanFile = inputFile + '.clean'
 
-with open(cleanFile, 'w') as f:
-	pass
+def get_args():
+	parser = ArgumentParser(description='Stanford sentiment analysis wrapper')
+	parser.add_argument(
+		'-f', '--inputFile',
+		help='Input file',
+		required=True
+	)
+	return parser.parse_args()
 
-with open(inputFile, 'r') as f:
-	for blob in f:
-		review = json.loads(blob)
-		text = review['reviewText']
-		with open(cleanFile, 'a') as cf:
-			cf.write(text + '\n')
 
-call([
-	'java',
-	'-cp',
-	'stanford-corenlp-full-2016-10-31/*',
-	'-mx5g',
-	'edu.stanford.nlp.sentiment.SentimentPipeline',
-	'-file',
-	cleanFile
-])
+if __name__ == '__main__':
+	args = get_args()
+	inputFile = args.inputFile
 
-# count = 0
-# correct = 0
+	count = 0
+	correct = 0
 
-# scores = {
-#     'Very negative': 1,
-#     'Negative': 2,
-#     'Neutral': 3,
-#     'Positive': 4
-# }
+	scores = {
+	    'Very negative': 1,
+	    'Negative': 2,
+	    'Neutral': 3,
+	    'Positive': 4,
+	    'Very positive': 5
+	}
 
-# with open(cleanFile, 'r') as f:
-# 	for blob in f:
-# 		review = json.loads(blob)
-# 		text = review['reviewText']
-# 		expectedScore = review['overall']
-# 		print text, expectedScore
-# 		actualScoreLabel, err = pipe.communicate(text)
-# 		print actualScoreLabel, err
-# 		if scores[actualScoreLabel.strip()] == expectedScore:
-# 			correct += 1
-# 		count += 1
-
-# print correct / count
+	with open(inputFile, 'r') as f:
+		for blob in f:
+			if blob:
+				review = json.loads(blob)
+				text = review['reviewText']
+				sentences = text.split('.')
+				expectedScore = review['overall']
+				print text, expectedScore
+				sentenceScores = []
+				p = Popen([
+					'java',
+					'-cp',
+					'stanford-corenlp-full-2016-10-31/*',
+					'-mx5g',
+					'edu.stanford.nlp.sentiment.SentimentPipeline',
+					'-stdin'
+				], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+				sentenceScores, err = p.communicate('\n'.join(sentences) + '\n')
+				sentenceScores = sentenceScores.split('\n')
+				sentenceScores = [scores[score.strip()] for score in sentenceScores if score]
+				averageScore = sum(sentenceScores) / len(sentenceScores)
+				print averageScore
+				if abs(averageScore - expectedScore) < 2:
+					correct += 1
+				count += 1
+		print correct / count
